@@ -1,0 +1,20 @@
+---
+import "../styles/global.css";
+const { title = "Backend Developer", description = "Java · Spring · PostgreSQL · Redis" } = Astro.props;
+---
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width" />
+<meta name="description" content={description} />
+<title>{title} | Backend Developer</title>
+</head>
+<body>
+<header class="header"><div class="container nav">
+<a class="logo" href="/">Backend.log</a>
+<nav><a href="/">Home</a><a href="/posts">Posts</a><a href="/about">About</a><a href="https://github.com/YOUR_GITHUB_ID">GitHub</a></nav>
+</div></header>
+<main><slot /></main>
+<footer class="footer"><div class="container">Built with Astro · GitHub Pages</div></footer>
+</body></html>

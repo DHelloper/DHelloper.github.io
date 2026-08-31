@@ -1,0 +1,11 @@
+---
+import Layout from "../../layouts/Layout.astro";
+const posts = [
+["PostgreSQL Index를 적용하면 정말 빨라질까?","Database","100만 건 데이터와 EXPLAIN ANALYZE로 Index 효과를 검증한다.","/posts/postgresql-index"],
+["Redis Cache 적용 전후 성능 비교","Redis","Cache Aside를 적용하고 응답시간과 DB 부하를 비교한다.","/posts/redis-cache"]
+];
+---
+<Layout title="Posts"><section class="page"><div class="container">
+<p class="eyebrow">TECHNICAL BLOG</p><h1>Posts</h1><p class="lead">직접 구현하고 측정한 백엔드 기술 기록입니다.</p>
+<div class="post-list">{posts.map(([title,category,desc,href]) => <a class="post-row" href={href}><span class="tag">{category}</span><div><h2>{title}</h2><p>{desc}</p></div><span>→</span></a>)}</div>
+</div></section></Layout>
