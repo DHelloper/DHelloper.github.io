@@ -1,0 +1,22 @@
+---
+import { getCollection, render } from "astro:content";
+import Layout from "../../layouts/Layout.astro";
+import Comments from "../../components/Comments.astro";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("posts", ({ data }) => !data.draft);
+  return posts.map((post) => ({ params: { id: post.id }, props: { post } }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+const categorySlug = post.id.split("/")[0];
+---
+<Layout title={post.data.title} description={post.data.description}>
+<article class="page"><div class="container narrow">
+<nav class="breadcrumb"><a href="/posts">Posts</a><span>/</span><a href={`/posts/${categorySlug}`}>{post.data.category}</a></nav>
+<h1>{post.data.title}</h1>
+<Content />
+</div></article>
+<Comments />
+</Layout>

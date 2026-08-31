@@ -1,0 +1,175 @@
+---
+import Layout from "../layouts/Layout.astro";
+import encrypted from "../data/roadmap.enc.json";
+---
+<Layout title="공부 로드맵" description="4년차 백엔드 개발자 3개월 공부 로드맵" noindex={true}>
+<section class="page"><div class="container narrow">
+<p class="eyebrow">PRIVATE</p>
+<h1>공부 로드맵</h1>
+
+<div id="gate" class="roadmap-gate">
+  <p class="lead">비밀번호를 입력하세요.</p>
+  <form id="gate-form">
+    <input id="gate-input" type="password" autocomplete="off" required />
+    <button type="submit" class="button primary">열기</button>
+  </form>
+  <p id="gate-error" class="roadmap-gate-error" hidden>비밀번호가 올바르지 않습니다.</p>
+</div>
+
+<div id="roadmap-content" hidden>
+  <p class="lead">평일 기준 하루 1~2시간 분량으로 짠 3개월(8/31 ~ 11/27) 공부 로드맵입니다. <a href="#" id="lock-btn">잠그기</a></p>
+  <div class="roadmap-progress"><div class="roadmap-progress-bar" id="progress-bar"></div></div>
+  <p class="roadmap-progress-label" id="progress-label">0 / 0 완료</p>
+  <div id="roadmap-root"></div>
+</div>
+
+<script define:vars={{ encrypted }}>
+  const STORAGE_KEY = "roadmap-progress";
+  const PASS_KEY = "roadmap-pass";
+
+  function b64ToBytes(b64) {
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  }
+
+  async function deriveKey(passphrase, saltBytes, iterations) {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(passphrase),
+      "PBKDF2",
+      false,
+      ["deriveKey"]
+    );
+    return crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: saltBytes, iterations, hash: "SHA-256" },
+      keyMaterial,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["decrypt"]
+    );
+  }
+
+  async function tryDecrypt(passphrase) {
+    const salt = b64ToBytes(encrypted.salt);
+    const iv = b64ToBytes(encrypted.iv);
+    const ciphertext = b64ToBytes(encrypted.ciphertext);
+    const key = await deriveKey(passphrase, salt, encrypted.iterations);
+    const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+    return JSON.parse(new TextDecoder().decode(plainBuf));
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[c]));
+  }
+
+  function renderRoadmap(phases) {
+    const root = document.getElementById("roadmap-root");
+    root.innerHTML = phases.map((phase) => `
+      <div class="roadmap-phase">
+        <h2>${escapeHtml(phase.title)}</h2>
+        ${phase.weeks.map((week) => `
+          <div class="roadmap-week">
+            <div class="roadmap-week-head">
+              <span class="tag">${escapeHtml(week.range)}</span>
+              <h3>${week.week}주차 · ${escapeHtml(week.theme)}</h3>
+            </div>
+            ${week.days.map((day) => `
+              <div class="roadmap-day">
+                <div class="roadmap-day-date">${day.date.slice(5).replace("-", "/")} (${day.weekday})</div>
+                <ul class="roadmap-tasks">
+                  ${day.tasks.map((task, i) => `
+                    <li><label>
+                      <input type="checkbox" data-task-id="${day.date}-${i}" />
+                      <span class="tag small">${escapeHtml(task.category)}</span>
+                      <span>${escapeHtml(task.title)}</span>
+                    </label></li>
+                  `).join("")}
+                </ul>
+              </div>
+            `).join("")}
+          </div>
+        `).join("")}
+      </div>
+    `).join("");
+
+    wireCheckboxes();
+  }
+
+  function loadProgress() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  }
+
+  function saveProgress(state) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function updateProgress() {
+    const boxes = document.querySelectorAll('input[type="checkbox"][data-task-id]');
+    const total = boxes.length;
+    const done = document.querySelectorAll('input[type="checkbox"][data-task-id]:checked').length;
+    const bar = document.getElementById("progress-bar");
+    const label = document.getElementById("progress-label");
+    if (bar) bar.style.width = total ? `${(done / total) * 100}%` : "0%";
+    if (label) label.textContent = `${done} / ${total} 완료`;
+  }
+
+  function wireCheckboxes() {
+    const state = loadProgress();
+    document.querySelectorAll('input[type="checkbox"][data-task-id]').forEach((box) => {
+      const id = box.dataset.taskId;
+      if (state[id]) box.checked = true;
+      box.addEventListener("change", () => {
+        state[id] = box.checked;
+        saveProgress(state);
+        updateProgress();
+      });
+    });
+    updateProgress();
+  }
+
+  async function unlock(passphrase) {
+    const errorEl = document.getElementById("gate-error");
+    errorEl.hidden = true;
+    try {
+      const data = await tryDecrypt(passphrase);
+      document.getElementById("gate").hidden = true;
+      document.getElementById("roadmap-content").hidden = false;
+      renderRoadmap(data);
+      try {
+        localStorage.setItem(PASS_KEY, passphrase);
+      } catch {}
+    } catch {
+      errorEl.hidden = false;
+    }
+  }
+
+  document.getElementById("gate-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = document.getElementById("gate-input");
+    unlock(input.value);
+  });
+
+  document.getElementById("lock-btn").addEventListener("click", (e) => {
+    e.preventDefault();
+    try {
+      localStorage.removeItem(PASS_KEY);
+    } catch {}
+    location.reload();
+  });
+
+  let savedPass = null;
+  try {
+    savedPass = localStorage.getItem(PASS_KEY);
+  } catch {}
+  if (savedPass) {
+    unlock(savedPass);
+  }
+</script>
+</div></section>
+</Layout>

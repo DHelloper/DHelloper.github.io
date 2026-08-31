@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.astro/
+
+CLAUDE.md
+
+# never commit: plaintext source for the encrypted roadmap page
+secrets/

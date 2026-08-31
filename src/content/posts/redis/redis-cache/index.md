@@ -1,8 +1,10 @@
 ---
-layout: ../../layouts/Layout.astro
 title: Redis Cache 적용 전후 성능 비교
 description: Cache Aside 패턴을 적용하고 성능을 비교한 실험
+category: Redis
+pubDate: 2026-08-31
 ---
+
 # Redis Cache 적용 전후 성능 비교
 
 ## 1. 문제

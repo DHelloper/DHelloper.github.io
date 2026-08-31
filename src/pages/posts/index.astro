@@ -1,11 +1,23 @@
 ---
 import Layout from "../../layouts/Layout.astro";
-const posts = [
-["PostgreSQL Index를 적용하면 정말 빨라질까?","Database","100만 건 데이터와 EXPLAIN ANALYZE로 Index 효과를 검증한다.","/posts/postgresql-index"],
-["Redis Cache 적용 전후 성능 비교","Redis","Cache Aside를 적용하고 응답시간과 DB 부하를 비교한다.","/posts/redis-cache"]
-];
+import { getCollection } from "astro:content";
+
+const posts = await getCollection("posts", ({ data }) => !data.draft);
+
+const groups = new Map();
+for (const post of posts) {
+  const slug = post.id.split("/")[0];
+  if (!groups.has(slug)) groups.set(slug, { slug, label: post.data.category, posts: [] });
+  groups.get(slug).posts.push(post);
+}
+const categories = [...groups.values()]
+  .map((g) => ({ ...g, posts: g.posts.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()) }))
+  .sort((a, b) => b.posts[0].data.pubDate.valueOf() - a.posts[0].data.pubDate.valueOf());
 ---
 <Layout title="Posts"><section class="page"><div class="container">
 <p class="eyebrow">TECHNICAL BLOG</p><h1>Posts</h1><p class="lead">직접 구현하고 측정한 백엔드 기술 기록입니다.</p>
-<div class="post-list">{posts.map(([title,category,desc,href]) => <a class="post-row" href={href}><span class="tag">{category}</span><div><h2>{title}</h2><p>{desc}</p></div><span>→</span></a>)}</div>
+{categories.map((category) => <div class="category-group">
+<div class="section-head"><h2><a href={`/posts/${category.slug}`}>{category.label}</a></h2><span class="count">{category.posts.length}개</span></div>
+<div class="post-list">{category.posts.map((post) => <a class="post-row" href={`/posts/${post.id}`}><span class="tag">{post.data.category}</span><div><h2>{post.data.title}</h2><p>{post.data.description}</p></div><span>→</span></a>)}</div>
+</div>)}
 </div></section></Layout>

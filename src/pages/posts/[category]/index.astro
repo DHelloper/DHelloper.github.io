@@ -1,0 +1,28 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { getCollection } from "astro:content";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("posts", ({ data }) => !data.draft);
+  const groups = new Map();
+  for (const post of posts) {
+    const slug = post.id.split("/")[0];
+    if (!groups.has(slug)) groups.set(slug, { slug, label: post.data.category, posts: [] });
+    groups.get(slug).posts.push(post);
+  }
+  return [...groups.values()].map((group) => ({
+    params: { category: group.slug },
+    props: {
+      label: group.label,
+      posts: group.posts.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()),
+    },
+  }));
+}
+
+const { label, posts } = Astro.props;
+---
+<Layout title={label}><section class="page"><div class="container">
+<nav class="breadcrumb"><a href="/posts">Posts</a><span>/</span><span>{label}</span></nav>
+<h1>{label}</h1>
+<div class="post-list">{posts.map((post) => <a class="post-row" href={`/posts/${post.id}`}><span class="tag">{post.data.category}</span><div><h2>{post.data.title}</h2><p>{post.data.description}</p></div><span>→</span></a>)}</div>
+</div></section></Layout>

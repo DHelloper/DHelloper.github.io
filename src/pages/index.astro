@@ -1,9 +1,9 @@
 ---
 import Layout from "../layouts/Layout.astro";
-const posts = [
-{title:"PostgreSQL Index를 적용하면 정말 빨라질까?",category:"Database",description:"100만 건 데이터와 EXPLAIN ANALYZE로 Index 효과를 검증한다.",href:"/posts/postgresql-index"},
-{title:"Redis Cache 적용 전후 성능 비교",category:"Redis",description:"Cache Aside를 적용하고 응답시간과 DB 부하를 비교한다.",href:"/posts/redis-cache"}
-];
+import { getCollection } from "astro:content";
+const posts = (await getCollection("posts", ({ data }) => !data.draft))
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
+  .slice(0, 2);
 ---
 <Layout title="Backend Developer">
 <section class="hero"><div class="container">
@@ -14,7 +14,7 @@ const posts = [
 </div></section>
 <section class="section"><div class="container">
 <div class="section-head"><div><p class="eyebrow">RECENT POSTS</p><h2>최근 기록</h2></div><a href="/posts">전체 보기 →</a></div>
-<div class="grid">{posts.map(post => <a class="card" href={post.href}><span class="tag">{post.category}</span><h3>{post.title}</h3><p>{post.description}</p><span class="read">Read more →</span></a>)}</div>
+<div class="grid">{posts.map((post) => <a class="card" href={`/posts/${post.id}`}><span class="tag">{post.data.category}</span><h3>{post.data.title}</h3><p>{post.data.description}</p><span class="read">Read more →</span></a>)}</div>
 </div></section>
 <section class="section muted"><div class="container">
 <p class="eyebrow">LEARNING PIPELINE</p><h2>공부한 것을 결과물로 남깁니다.</h2>

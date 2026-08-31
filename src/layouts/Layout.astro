@@ -1,6 +1,6 @@
 ---
 import "../styles/global.css";
-const { title = "Backend Developer", description = "Java · Spring · PostgreSQL · Redis" } = Astro.props;
+const { title = "Backend Developer", description = "Java · Spring · PostgreSQL · Redis", noindex = false } = Astro.props;
 ---
 <!doctype html>
 <html lang="ko">
@@ -8,6 +8,7 @@ const { title = "Backend Developer", description = "Java · Spring · PostgreSQL
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width" />
 <meta name="description" content={description} />
+{noindex && <meta name="robots" content="noindex, nofollow" />}
 <title>{title} | Backend Developer</title>
 </head>
 <body>

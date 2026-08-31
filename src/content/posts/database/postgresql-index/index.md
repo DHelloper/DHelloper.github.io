@@ -1,8 +1,10 @@
 ---
-layout: ../../layouts/Layout.astro
 title: PostgreSQL Index를 적용하면 정말 빨라질까?
 description: 100만 건 데이터를 기준으로 PostgreSQL Index 성능을 비교한 실험
+category: Database
+pubDate: 2026-08-31
 ---
+
 # PostgreSQL Index를 적용하면 정말 빨라질까?
 
 ## 1. 문제
