@@ -1,0 +1,186 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const PASSWORD_HASH = "b384a75f976852cbb8b9b9542c0a60bb6a5bc3742cd3bb8981f554bcf42ef3b2";
+---
+<Layout title="글쓰기" description="배포 사이트에서 바로 쓰는 글 에디터" noindex={true}>
+<section class="page"><div class="container narrow">
+<p class="eyebrow">PRIVATE · EDITOR</p>
+<h1>글쓰기</h1>
+
+<div id="gate" class="roadmap-gate">
+  <p class="lead">비밀번호를 입력하세요.</p>
+  <form id="gate-form">
+    <input id="gate-input" type="password" autocomplete="off" required />
+    <button type="submit" class="button primary">열기</button>
+  </form>
+  <p id="gate-error" class="roadmap-gate-error" hidden>비밀번호가 올바르지 않습니다.</p>
+</div>
+
+<div id="write-content" hidden>
+  <p class="lead">여기서 쓴 글은 저장되지 않습니다. 다 쓰면 다운로드하거나 복사해서 저장소에 직접 추가하세요. <a href="#" id="lock-btn">잠그기</a></p>
+
+  <form id="write-form" class="write-form">
+    <label>제목<input id="f-title" name="title" required /></label>
+
+    <label>카테고리
+      <input id="f-category" name="category" list="category-list" placeholder="예: Database" required />
+      <datalist id="category-list">
+        <option value="Database"></option>
+        <option value="Redis"></option>
+      </datalist>
+    </label>
+
+    <label>slug (영문 URL)
+      <input id="f-slug" name="slug" placeholder="예: postgresql-index" pattern="[a-z0-9-]+" required />
+    </label>
+
+    <label>설명<input id="f-description" name="description" required /></label>
+
+    <label>발행일<input id="f-pubdate" name="pubDate" type="date" required /></label>
+
+    <label class="write-checkbox"><input id="f-draft" name="draft" type="checkbox" /> draft(임시글)로 표시</label>
+
+    <label>본문 (Markdown)<textarea id="f-content" name="content" required></textarea></label>
+
+    <p class="path-hint" id="path-hint">저장 위치: <code>src/content/posts/&lt;category&gt;/&lt;slug&gt;/index.md</code></p>
+
+    <div class="write-actions">
+      <button type="submit" class="button primary">다운로드 (index.md)</button>
+      <button type="button" id="copy-btn" class="button">클립보드에 복사</button>
+    </div>
+    <p id="copy-status" class="write-copy-status" hidden>복사됨!</p>
+  </form>
+</div>
+
+<script define:vars={{ PASSWORD_HASH }}>
+  const UNLOCK_KEY = "write-unlocked";
+
+  function slugify(value) {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9가-힣]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  async function sha256Hex(text) {
+    const enc = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest("SHA-256", enc);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  function escapeYaml(value) {
+    return String(value).replace(/"/g, '\\"');
+  }
+
+  function buildMarkdown() {
+    const title = document.getElementById("f-title").value;
+    const category = document.getElementById("f-category").value;
+    const description = document.getElementById("f-description").value;
+    const pubDate = document.getElementById("f-pubdate").value;
+    const draft = document.getElementById("f-draft").checked;
+    const content = document.getElementById("f-content").value;
+
+    return [
+      "---",
+      `title: "${escapeYaml(title)}"`,
+      `description: "${escapeYaml(description)}"`,
+      `category: "${escapeYaml(category)}"`,
+      `pubDate: ${pubDate}`,
+      `draft: ${draft}`,
+      "---",
+      "",
+      content,
+      "",
+    ].join("\n");
+  }
+
+  function updatePathHint() {
+    const categorySlug = slugify(document.getElementById("f-category").value) || "<category>";
+    const postSlug = slugify(document.getElementById("f-slug").value) || "<slug>";
+    document.getElementById("path-hint").innerHTML =
+      `저장 위치: <code>src/content/posts/${categorySlug}/${postSlug}/index.md</code>`;
+  }
+
+  function todayISO() {
+    const d = new Date();
+    return d.toISOString().slice(0, 10);
+  }
+
+  function initForm() {
+    document.getElementById("f-pubdate").value = todayISO();
+    ["f-category", "f-slug"].forEach((id) =>
+      document.getElementById(id).addEventListener("input", updatePathHint)
+    );
+    updatePathHint();
+
+    document.getElementById("write-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const markdown = buildMarkdown();
+      const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "index.md";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById("copy-btn").addEventListener("click", async () => {
+      const markdown = buildMarkdown();
+      try {
+        await navigator.clipboard.writeText(markdown);
+        const status = document.getElementById("copy-status");
+        status.hidden = false;
+        setTimeout(() => (status.hidden = true), 2000);
+      } catch {
+        alert("클립보드 복사에 실패했습니다. 브라우저 권한을 확인해주세요.");
+      }
+    });
+  }
+
+  function unlock() {
+    document.getElementById("gate").hidden = true;
+    document.getElementById("write-content").hidden = false;
+    initForm();
+  }
+
+  document.getElementById("gate-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = document.getElementById("gate-input");
+    const errorEl = document.getElementById("gate-error");
+    const hash = await sha256Hex(input.value);
+    if (hash === PASSWORD_HASH) {
+      errorEl.hidden = true;
+      try {
+        localStorage.setItem(UNLOCK_KEY, "1");
+      } catch {}
+      unlock();
+    } else {
+      errorEl.hidden = false;
+    }
+  });
+
+  document.getElementById("lock-btn").addEventListener("click", (e) => {
+    e.preventDefault();
+    try {
+      localStorage.removeItem(UNLOCK_KEY);
+    } catch {}
+    location.reload();
+  });
+
+  let alreadyUnlocked = false;
+  try {
+    alreadyUnlocked = localStorage.getItem(UNLOCK_KEY) === "1";
+  } catch {}
+  if (alreadyUnlocked) {
+    unlock();
+  }
+</script>
+</div></section>
+</Layout>

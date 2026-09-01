@@ -8,7 +8,7 @@ export default defineConfig({
   integrations: [
     mdx(),
     sitemap({
-      filter: (page) => !page.includes("/roadmap")
+      filter: (page) => !page.includes("/roadmap") && !page.includes("/write")
     }),
     ...(process.env.NODE_ENV !== "production" ? [writeTool()] : [])
   ]
