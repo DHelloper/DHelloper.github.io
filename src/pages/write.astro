@@ -8,7 +8,7 @@ const PASSWORD_HASH = "b384a75f976852cbb8b9b9542c0a60bb6a5bc3742cd3bb8981f554bcf
 <p class="eyebrow">PRIVATE · EDITOR</p>
 <h1>글쓰기</h1>
 
-<div id="gate" class="roadmap-gate">
+<div id="gate" class="roadmap-gate" data-password-hash={PASSWORD_HASH}>
   <p class="lead">비밀번호를 입력하세요.</p>
   <form id="gate-form">
     <input id="gate-input" type="password" autocomplete="off" required />
@@ -41,20 +41,49 @@ const PASSWORD_HASH = "b384a75f976852cbb8b9b9542c0a60bb6a5bc3742cd3bb8981f554bcf
 
     <label class="write-checkbox"><input id="f-draft" name="draft" type="checkbox" /> draft(임시글)로 표시</label>
 
-    <label>본문 (Markdown)<textarea id="f-content" name="content" required></textarea></label>
+    <label>본문 (Markdown)</label>
+
+    <div class="write-toolbar">
+      <button type="button" data-cmd="bold" title="굵게">B</button>
+      <button type="button" data-cmd="italic" title="기울임"><i>I</i></button>
+      <button type="button" data-cmd="h2" title="제목">H2</button>
+      <button type="button" data-cmd="quote" title="인용">"</button>
+      <button type="button" data-cmd="list" title="목록">•</button>
+      <button type="button" data-cmd="code" title="코드 블록">{'</>'}</button>
+      <button type="button" data-cmd="link" title="링크">🔗 링크</button>
+      <button type="button" id="image-btn" title="이미지 삽입">🖼 이미지</button>
+      <input id="image-input" type="file" accept="image/*" multiple hidden />
+    </div>
+
+    <div class="write-tabs">
+      <button type="button" id="tab-write" class="active">작성</button>
+      <button type="button" id="tab-preview">미리보기</button>
+    </div>
+
+    <textarea id="f-content" name="content" placeholder="여기에 마크다운으로 작성하세요. 이미지는 Ctrl+V로 붙여넣거나 위 🖼 이미지 버튼을 눌러 추가할 수 있습니다." required></textarea>
+    <div id="preview-pane" class="preview-pane" hidden></div>
+
+    <div id="attached-images" class="attached-images"></div>
 
     <p class="path-hint" id="path-hint">저장 위치: <code>src/content/posts/&lt;category&gt;/&lt;slug&gt;/index.md</code></p>
 
     <div class="write-actions">
-      <button type="submit" class="button primary">다운로드 (index.md)</button>
+      <button type="submit" class="button primary">다운로드 (index.md + 이미지)</button>
       <button type="button" id="copy-btn" class="button">클립보드에 복사</button>
     </div>
     <p id="copy-status" class="write-copy-status" hidden>복사됨!</p>
   </form>
 </div>
 
-<script define:vars={{ PASSWORD_HASH }}>
+<script>
+  import { marked } from "marked";
+
   const UNLOCK_KEY = "write-unlocked";
+  const gate = document.getElementById("gate");
+  const PASSWORD_HASH = gate.dataset.passwordHash;
+
+  // attached image filename -> File
+  const attachedImages = new Map();
 
   function slugify(value) {
     return value
@@ -76,13 +105,12 @@ const PASSWORD_HASH = "b384a75f976852cbb8b9b9542c0a60bb6a5bc3742cd3bb8981f554bcf
     return String(value).replace(/"/g, '\\"');
   }
 
-  function buildMarkdown() {
+  function buildFrontmatter() {
     const title = document.getElementById("f-title").value;
     const category = document.getElementById("f-category").value;
     const description = document.getElementById("f-description").value;
     const pubDate = document.getElementById("f-pubdate").value;
     const draft = document.getElementById("f-draft").checked;
-    const content = document.getElementById("f-content").value;
 
     return [
       "---",
@@ -93,48 +121,232 @@ const PASSWORD_HASH = "b384a75f976852cbb8b9b9542c0a60bb6a5bc3742cd3bb8981f554bcf
       `draft: ${draft}`,
       "---",
       "",
-      content,
-      "",
     ].join("\n");
+  }
+
+  function buildMarkdown() {
+    const content = document.getElementById("f-content").value;
+    return buildFrontmatter() + content + "\n";
   }
 
   function updatePathHint() {
     const categorySlug = slugify(document.getElementById("f-category").value) || "<category>";
     const postSlug = slugify(document.getElementById("f-slug").value) || "<slug>";
+    const hasImages = attachedImages.size > 0;
     document.getElementById("path-hint").innerHTML =
-      `저장 위치: <code>src/content/posts/${categorySlug}/${postSlug}/index.md</code>`;
+      `저장 위치: <code>src/content/posts/${categorySlug}/${postSlug}/index.md</code>` +
+      (hasImages ? ` (이미지도 같은 폴더에)` : "");
   }
 
   function todayISO() {
-    const d = new Date();
-    return d.toISOString().slice(0, 10);
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  // ---- toolbar helpers ----
+  function wrapSelection(textarea, before, after = before) {
+    const { selectionStart: start, selectionEnd: end, value } = textarea;
+    const selected = value.slice(start, end);
+    textarea.value = value.slice(0, start) + before + selected + after + value.slice(end);
+    const cursorStart = start + before.length;
+    textarea.setSelectionRange(cursorStart, cursorStart + selected.length);
+    textarea.focus();
+  }
+
+  function prefixLines(textarea, prefix) {
+    const { selectionStart: start, selectionEnd: end, value } = textarea;
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    let lineEnd = value.indexOf("\n", end);
+    if (lineEnd === -1) lineEnd = value.length;
+    const block = value.slice(lineStart, lineEnd);
+    const prefixed = block
+      .split("\n")
+      .map((line) => prefix + line)
+      .join("\n");
+    textarea.value = value.slice(0, lineStart) + prefixed + value.slice(lineEnd);
+    textarea.focus();
+  }
+
+  function insertAtCursor(textarea, text) {
+    const { selectionStart: start, selectionEnd: end, value } = textarea;
+    textarea.value = value.slice(0, start) + text + value.slice(end);
+    const pos = start + text.length;
+    textarea.setSelectionRange(pos, pos);
+    textarea.focus();
+  }
+
+  function runToolbarCommand(cmd) {
+    const textarea = document.getElementById("f-content");
+    switch (cmd) {
+      case "bold":
+        wrapSelection(textarea, "**");
+        break;
+      case "italic":
+        wrapSelection(textarea, "*");
+        break;
+      case "h2":
+        prefixLines(textarea, "## ");
+        break;
+      case "quote":
+        prefixLines(textarea, "> ");
+        break;
+      case "list":
+        prefixLines(textarea, "- ");
+        break;
+      case "code": {
+        const { selectionStart: start, selectionEnd: end, value } = textarea;
+        const selected = value.slice(start, end);
+        wrapSelection(textarea, "```\n", "\n```");
+        void selected;
+        break;
+      }
+      case "link": {
+        const url = prompt("링크 URL을 입력하세요", "https://");
+        if (!url) return;
+        wrapSelection(textarea, "[", `](${url})`);
+        break;
+      }
+    }
+  }
+
+  function uniqueFilename(name) {
+    const dot = name.lastIndexOf(".");
+    const stem = dot === -1 ? name : name.slice(0, dot);
+    const ext = dot === -1 ? "" : name.slice(dot);
+    let candidate = slugify(stem) + ext.toLowerCase();
+    let i = 1;
+    while (attachedImages.has(candidate)) {
+      candidate = `${slugify(stem)}-${i}${ext.toLowerCase()}`;
+      i += 1;
+    }
+    return candidate;
+  }
+
+  function renderAttachedImages() {
+    const box = document.getElementById("attached-images");
+    box.innerHTML = "";
+    attachedImages.forEach((file, filename) => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.innerHTML = `${filename} <button type="button" data-remove="${filename}">×</button>`;
+      box.appendChild(chip);
+    });
+    box.querySelectorAll("[data-remove]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        attachedImages.delete(btn.dataset.remove);
+        renderAttachedImages();
+        updatePathHint();
+      });
+    });
+  }
+
+  function handleImageFiles(files) {
+    const textarea = document.getElementById("f-content");
+    Array.from(files).forEach((file) => {
+      const filename = uniqueFilename(file.name || "image.png");
+      attachedImages.set(filename, file);
+      const alt = filename.replace(/\.[^.]+$/, "");
+      insertAtCursor(textarea, `\n![${alt}](./${filename})\n`);
+    });
+    renderAttachedImages();
+    updatePathHint();
+  }
+
+  // ---- preview ----
+  const imageObjectUrls = new Map(); // filename -> object URL (revoked on rebuild)
+
+  function renderPreview() {
+    imageObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+    imageObjectUrls.clear();
+
+    let markdown = document.getElementById("f-content").value;
+    attachedImages.forEach((file, filename) => {
+      const url = URL.createObjectURL(file);
+      imageObjectUrls.set(filename, url);
+      markdown = markdown.split(`(./${filename})`).join(`(${url})`);
+    });
+
+    document.getElementById("preview-pane").innerHTML = marked.parse(markdown);
+  }
+
+  function setTab(tab) {
+    const writeTab = document.getElementById("tab-write");
+    const previewTab = document.getElementById("tab-preview");
+    const textarea = document.getElementById("f-content");
+    const preview = document.getElementById("preview-pane");
+    const toolbar = document.querySelector(".write-toolbar");
+
+    if (tab === "preview") {
+      renderPreview();
+      textarea.hidden = true;
+      toolbar.hidden = true;
+      preview.hidden = false;
+      writeTab.classList.remove("active");
+      previewTab.classList.add("active");
+    } else {
+      textarea.hidden = false;
+      toolbar.hidden = false;
+      preview.hidden = true;
+      writeTab.classList.add("active");
+      previewTab.classList.remove("active");
+    }
+  }
+
+  function triggerDownload(filename, blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   function initForm() {
     document.getElementById("f-pubdate").value = todayISO();
+
     ["f-category", "f-slug"].forEach((id) =>
       document.getElementById(id).addEventListener("input", updatePathHint)
     );
     updatePathHint();
 
+    document.querySelectorAll(".write-toolbar button[data-cmd]").forEach((btn) => {
+      btn.addEventListener("click", () => runToolbarCommand(btn.dataset.cmd));
+    });
+
+    document.getElementById("image-btn").addEventListener("click", () => {
+      document.getElementById("image-input").click();
+    });
+    document.getElementById("image-input").addEventListener("change", (e) => {
+      if (e.target.files?.length) handleImageFiles(e.target.files);
+      e.target.value = "";
+    });
+
+    document.getElementById("f-content").addEventListener("paste", (e) => {
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageFiles = items
+        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter(Boolean);
+      if (imageFiles.length) {
+        e.preventDefault();
+        handleImageFiles(imageFiles);
+      }
+    });
+
+    document.getElementById("tab-write").addEventListener("click", () => setTab("write"));
+    document.getElementById("tab-preview").addEventListener("click", () => setTab("preview"));
+
     document.getElementById("write-form").addEventListener("submit", (e) => {
       e.preventDefault();
       const markdown = buildMarkdown();
-      const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "index.md";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      triggerDownload("index.md", new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
+      attachedImages.forEach((file, filename) => triggerDownload(filename, file));
     });
 
     document.getElementById("copy-btn").addEventListener("click", async () => {
-      const markdown = buildMarkdown();
       try {
-        await navigator.clipboard.writeText(markdown);
+        await navigator.clipboard.writeText(buildMarkdown());
         const status = document.getElementById("copy-status");
         status.hidden = false;
         setTimeout(() => (status.hidden = true), 2000);
@@ -145,7 +357,7 @@ const PASSWORD_HASH = "b384a75f976852cbb8b9b9542c0a60bb6a5bc3742cd3bb8981f554bcf
   }
 
   function unlock() {
-    document.getElementById("gate").hidden = true;
+    gate.hidden = true;
     document.getElementById("write-content").hidden = false;
     initForm();
   }
