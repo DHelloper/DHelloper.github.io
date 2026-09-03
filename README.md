@@ -9,8 +9,8 @@ npm run dev
 ```
 
 ## GitHub Pages
-1. Repository를 `YOUR_GITHUB_ID.github.io`로 생성
-2. `astro.config.mjs`의 `YOUR_GITHUB_ID` 변경
+1. Repository: `DHelloper.github.io`
+2. `astro.config.mjs`의 `site`는 `https://DHelloper.github.io`로 설정되어 있음
 3. GitHub → Settings → Pages → Source를 **GitHub Actions**로 설정
 4. `main`에 push하면 자동 배포
 
